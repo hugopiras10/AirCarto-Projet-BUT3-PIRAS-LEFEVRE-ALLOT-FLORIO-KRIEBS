@@ -29,7 +29,6 @@ h1 { margin-bottom: 4px; }
 <p>
  Période :
  <select id="periode">
-  <option value="-1h">1 dernière heure</option>
   <option value="-6h">6 dernières heures</option>
   <option value="-24h" selected>24 dernières heures</option>
   <option value="-7d">7 derniers jours</option>
@@ -59,7 +58,7 @@ const CLE = "1fdf17de86d313e5f49e03ab36f0360b"; // Remplacez par votre clé de g
 const DEVICE_ID = ""; // Laissez vide pour toutes les cartes
 
 // Moyenne par intervalle selon la période
-const MOYENNE = { "-1h": "1m", "-6h": "5m", "-24h": "15m", "-7d": "1h" };
+const MOYENNE = { "-6h": "5m", "-24h": "15m", "-7d": "1h" };
 
 // Nom affiché et unité de chaque champ de l'API
 const CHAMPS = {
@@ -68,7 +67,7 @@ const CHAMPS = {
 };
 const graphes = {};
 
-// Demande les mesures au serveur et trie chronologiquement strict
+// Demande les mesures au serveur et trie chronologiquement du plus ancien au plus récent
 async function chargerMesures(periode) {
  const params = new URLSearchParams({ key: CLE, start: periode, freq: MOYENNE[periode] });
  if (DEVICE_ID) params.set("device_id", DEVICE_ID);
@@ -86,12 +85,11 @@ async function chargerMesures(periode) {
  }
  
  let points = json.points || [];
- // Tri explicite du plus ancien (début) au plus récent (fin)
  points.sort((a, b) => new Date(a.time) - new Date(b.time));
  return points;
 }
 
-// Dessine un graphe avec un axe temporel orienté de gauche à droite et affichage des jours
+// Dessine un graphe avec une échelle temporelle propre
 function dessiner(idCanvas, points, champs) {
  if (typeof Chart === 'undefined') {
    console.error("Chart.js n'est pas chargé !");
@@ -129,13 +127,6 @@ function dessiner(idCanvas, points, champs) {
          type: 'time',
          time: {
            tooltipFormat: 'dd/MM/yyyy HH:mm',
-           // On force l'affichage de la date (jour/mois) et de l'heure sur l'axe
-           displayFormats: {
-             minute: 'dd/MM HH:mm',
-             hour: 'dd/MM HH:mm',
-             day: 'dd/MM',
-             week: 'dd/MM'
-           }
          },
          ticks: {
            maxTicksLimit: 8,
@@ -171,7 +162,7 @@ async function rafraichir() {
  try {
    const points = await chargerMesures(periode);
    if (!points || points.length === 0) {
-     etat.textContent = "Aucune mesure sur cette période : essayez de sélectionner '24 dernières heures'.";
+     etat.textContent = "Aucune mesure sur cette période : essayez de sélectionner '7 derniers jours'.";
      document.getElementById("valeurs").innerHTML = "Aucune donnée disponible";
      return;
    }
