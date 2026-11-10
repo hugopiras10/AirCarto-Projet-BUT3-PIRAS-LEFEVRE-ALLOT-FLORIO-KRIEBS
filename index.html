@@ -26,7 +26,6 @@ h1 { margin-bottom: 4px; }
 #valeurs { display: flex; flex-wrap: wrap; gap: 24px; }
 .valeur b { display: block; font-size: 1.8rem; }
 #etat { color: #5a6a60; font-weight: 500; }
-#etat.attention { color: #b26a00; }
 #etat.erreur { color: #b3261e; }
 </style>
 </head>
@@ -37,11 +36,9 @@ h1 { margin-bottom: 4px; }
 <p>
  Période :
  <select id="periode">
-  <option value="-1h">1 heure</option>
-  <option value="-6h">6 heures</option>
-  <option value="-24h" selected>24 heures</option>
-  <option value="-7d">7 jours</option>
-  <option value="-30d">30 jours</option>
+  <option value="-1h">Dernière heure</option>
+  <option value="-24h" selected>24 dernières heures</option>
+  <option value="-7d">7 derniers jours</option>
  </select>
 </p>
 
@@ -52,7 +49,8 @@ h1 { margin-bottom: 4px; }
  <div id="valeurs">En attente des données...</div>
 </div>
 
-<div class="carte" id="carte-pm">
+<!-- Graphe PM avec ses propres filtres -->
+<div class="carte">
  <h2>Particules (µg/m³)</h2>
  <div class="filtres-ligne">
   <span>Afficher :</span>
@@ -63,7 +61,8 @@ h1 { margin-bottom: 4px; }
  <canvas id="graphe-pm"></canvas>
 </div>
 
-<div class="carte" id="carte-meteo">
+<!-- Graphe Météo avec ses propres filtres -->
+<div class="carte">
  <h2>Température (°C) et humidité (%)</h2>
  <div class="filtres-ligne">
   <span>Afficher :</span>
@@ -73,218 +72,185 @@ h1 { margin-bottom: 4px; }
  <canvas id="graphe-meteo"></canvas>
 </div>
 
-<div class="carte" id="carte-co2">
+<!-- Graphe CO2 -->
+<div class="carte">
  <h2>CO₂ (ppm)</h2>
  <canvas id="graphe-co2"></canvas>
 </div>
 
 <script>
-// ---------- RÉGLAGES ----------
-const CLE = "1fdf17de86d313e5f49e03ab36f0360b";                          // Votre clé de groupe (32 caractères), ne pas publier
-const DEVICE_ID = "5C:01:3B:F1:53:C8";   // Identifiant unique de votre ESP32
+// ---------- RÉGLAGES : Mettez votre clé de groupe ici ----------
+const CLE = "1fdf17de86d313e5f49e03ab36f0360b";               // Remplacez par votre clé de groupe (32 caractères)
+const DEVICE_ID = "5C:01:3B:F1:53:C8";  // Identifiant unique de votre ESP32
 
-const MIN = 60 * 1000, H = 60 * MIN, JOUR = 24 * H;
+// Moyenne demandée au serveur selon la période.
+// Pas d'entrée pour "-1h" : le paramètre freq n'est alors pas envoyé,
+// et le serveur renvoie toutes les mesures brutes (une par envoi de la carte).
+const MOYENNE = { "-24h": "1m", "-7d": "5m" };
 
-// Pour chaque période : durée affichée, moyenne demandée au serveur (freq),
-// pas entre les repères de l'axe, unité et format des étiquettes.
-// Tous les graphes partagent le même axe : de (maintenant - durée) à maintenant.
-const PERIODES = {
-  "-1h":  { duree: 1 * H,    freq: "1m",  fm: 1 * MIN,  pas: 10 * MIN, unite: "minute", fmt: "HH:mm" },
-  "-6h":  { duree: 6 * H,    freq: "1m",  fm: 1 * MIN,  pas: 1 * H,    unite: "hour",   fmt: "HH:mm" },
-  "-24h": { duree: 24 * H,   freq: "1m",  fm: 1 * MIN,  pas: 3 * H,    unite: "hour",   fmt: "dd/MM HH:mm" },
-  "-7d":  { duree: 7 * JOUR, freq: "5m",  fm: 5 * MIN,  pas: 1 * JOUR, unite: "day",    fmt: "dd/MM" },
-  "-30d": { duree: 30 * JOUR, freq: "30m", fm: 30 * MIN, pas: 5 * JOUR, unite: "day",    fmt: "dd/MM" },
-};
-
-// Nom, unité et couleur de chaque champ de l'API
+// Nom affiché et unité de chaque champ de l'API
 const CHAMPS = {
-  pm1:  ["PM1", "µg/m³", "#3b82f6"], pm25: ["PM2.5", "µg/m³", "#ec4899"], pm10: ["PM10", "µg/m³", "#f59e0b"],
-  temp: ["Température", "°C", "#ef4444"], hum: ["Humidité", "%", "#0ea5e9"], co2: ["CO₂", "ppm", "#16a34a"],
+ pm1: ["PM1", "µg/m³"], pm25: ["PM2.5", "µg/m³"], pm10: ["PM10", "µg/m³"],
+ temp: ["Température", "°C"], hum: ["Humidité", "%"], co2: ["CO₂", "ppm"],
 };
 
 const graphes = {};
 let pointsGlobal = [];
-let periodeCourante = "-24h";
-let finAxe = Date.now();   // fin de l'axe (identique pour les 3 graphes)
 
-// ---------- Outils ----------
-function parseDate(t) {
-  if (typeof t === "number") return new Date(t * 1000);
-  if (typeof t === "string" && t.trim() !== "" && !isNaN(t)) return new Date(Number(t) * 1000);
-  return new Date(t);
-}
-
-function getCoches(classe) {
-  return Array.from(document.querySelectorAll("." + classe + ":checked")).map(cb => cb.value);
-}
-
-function depuis(ms) {
-  const m = Math.max(0, Math.round(ms / MIN));
-  if (m < 60) return m + " min";
-  const h = Math.floor(m / 60);
-  return h < 24 ? h + " h " + (m % 60) + " min" : Math.floor(h / 24) + " j";
-}
-
-// Repères de l'axe à des heures "rondes" (minuit local + k × pas)
-function reperes(min, max, pas) {
-  const t = new Date(min);
-  t.setHours(0, 0, 0, 0);
-  const parJour = pas >= JOUR;
-  const res = [];
-  while (t.getTime() <= max) {
-    if (t.getTime() >= min) res.push(t.getTime());
-    if (parJour) t.setDate(t.getDate() + pas / JOUR);
-    else t.setTime(t.getTime() + pas);
+// Convertit proprement le timestamp (secondes -> millisecondes JS)
+function parseDate(timeValue) {
+  if (typeof timeValue === 'number') {
+    return new Date(timeValue * 1000);
   }
-  return res;
+  if (!isNaN(timeValue) && typeof timeValue === 'string' && timeValue.trim() !== '') {
+    return new Date(Number(timeValue) * 1000);
+  }
+  return new Date(timeValue);
 }
 
-// Série d'un champ : tous les points reçus, sans en retirer aucun
-function serie(points, champ) {
-  return points.map(p => ({ x: parseDate(p.time).getTime(), y: p[champ] ?? null }));
+// Récupère les champs cochés pour une classe donnée
+function getCoches(classe) {
+  return Array.from(document.querySelectorAll('.' + classe + ':checked')).map(cb => cb.value);
 }
 
-// ---------- Données ----------
+// Demande les mesures au serveur et trie chronologiquement
 async function chargerMesures(periode) {
-  if (!CLE) throw new Error("clé de groupe manquante (constante CLE)");
-  const params = new URLSearchParams({ key: CLE, start: periode, freq: PERIODES[periode].freq });
-  if (DEVICE_ID) params.set("device_id", DEVICE_ID);
-
-  const reponse = await fetch("https://api.aircarto.fr/iut-amu/data?" + params.toString());
-  if (!reponse.ok) throw new Error("Erreur HTTP : " + reponse.status);
-
-  const json = await reponse.json();
-  if (!json.ok) throw new Error(json.message || "Erreur renvoyée par l'API");
-
-  const points = json.points || [];
-  points.sort((a, b) => parseDate(a.time) - parseDate(b.time));
-  return points;
+ const params = new URLSearchParams({ key: CLE, start: periode });
+ if (MOYENNE[periode]) params.set("freq", MOYENNE[periode]);  // pas de moyenne pour "-1h"
+ if (DEVICE_ID) params.set("device_id", DEVICE_ID);
+ 
+ const url = "https://api.aircarto.fr/iut-amu/data?" + params.toString();
+ const reponse = await fetch(url);
+ 
+ if (!reponse.ok) {
+   throw new Error("Erreur HTTP : " + reponse.status);
+ }
+ 
+ const json = await reponse.json();
+ if (!json.ok) {
+   throw new Error(json.message || "Erreur renvoyée par l'API");
+ }
+ 
+ let points = json.points || [];
+ points.sort((a, b) => parseDate(a.time).getTime() - parseDate(b.time).getTime());
+ return points;
 }
 
-// ---------- Graphes ----------
+// Dessine un graphe (reste toujours affiché, même si 0 courbe cochée)
 function dessinerGraphe(idCanvas, points, champsCibles) {
-  const ctx = document.getElementById(idCanvas);
-  if (!ctx) return;
-  if (graphes[idCanvas]) graphes[idCanvas].destroy();
+ const courbes = champsCibles.map(c => ({
+   label: CHAMPS[c][0],
+   data: points.map(p => ({
+     x: parseDate(p.time),
+     y: p[c] ?? null
+   })),
+   pointRadius: points.length < 30 ? 4 : 2,
+   borderWidth: 2,
+   spanGaps: true
+ }));
 
-  const p = PERIODES[periodeCourante];
-  const seuil = 3 * p.fm;  // au-delà de 3 intervalles sans mesure : segment en pointillés
+ if (graphes[idCanvas]) {
+   graphes[idCanvas].destroy();
+ }
+ 
+ const ctx = document.getElementById(idCanvas);
+ if (!ctx) return;
 
-  const courbes = champsCibles.map(c => ({
-    label: CHAMPS[c][0],
-    data: serie(points, c),
-    borderColor: CHAMPS[c][2],
-    backgroundColor: CHAMPS[c][2],
-    pointRadius: points.length < 30 ? 4 : 2,
-    pointHoverRadius: 5,
-    borderWidth: 2,
-    spanGaps: true,
-    // La courbe reste continue ; un trou dans les mesures est tracé en pointillés
-    segment: {
-      borderDash: ctx => (ctx.p1.parsed.x - ctx.p0.parsed.x > seuil ? [6, 6] : undefined),
-    },
-  }));
-
-  graphes[idCanvas] = new Chart(ctx, {
-    type: "line",
-    data: { datasets: courbes },
-    options: {
-      responsive: true,
-      animation: false,
-      interaction: { mode: "index", intersect: false },
-      scales: {
-        x: {
-          type: "time",
-          min: finAxe - p.duree,
-          max: finAxe,
-          time: {
-            unit: p.unite,
-            tooltipFormat: "dd/MM/yyyy HH:mm",
-            displayFormats: { [p.unite]: p.fmt },
-          },
-          // Repères réguliers, à des heures rondes, identiques sur les 3 graphes
-          afterBuildTicks: (axe) => {
-            axe.ticks = reperes(axe.min, axe.max, p.pas).map(value => ({ value }));
-          },
-          ticks: { autoSkip: false, maxRotation: 0 },
-        },
-        y: { beginAtZero: idCanvas !== "graphe-meteo" },
-      },
-    },
-  });
+ graphes[idCanvas] = new Chart(ctx, {
+   type: "line",
+   data: { datasets: courbes },
+   options: { 
+     responsive: true,
+     interaction: { mode: "index", intersect: false },
+     scales: {
+       x: {
+         type: 'time',
+         time: {
+           tooltipFormat: 'dd/MM/yyyy HH:mm',
+           displayFormats: {
+             minute: 'HH:mm',
+             hour: 'dd/MM HH:mm',
+             day: 'dd/MM'
+           }
+         },
+         ticks: {
+           maxTicksLimit: 8,
+           autoSkip: true
+         }
+       }
+     }
+   },
+ });
 }
 
+// Met à jour l'affichage global
 function actualiserAffichageInterface() {
   if (!pointsGlobal || pointsGlobal.length === 0) return;
-  dessinerGraphe("graphe-pm", pointsGlobal, getCoches("filtre-pm"));
-  dessinerGraphe("graphe-meteo", pointsGlobal, getCoches("filtre-meteo"));
+
+  const pmCoches = getCoches('filtre-pm');
+  const meteoCoches = getCoches('filtre-meteo');
+
+  dessinerGraphe("graphe-pm", pointsGlobal, pmCoches);
+  dessinerGraphe("graphe-meteo", pointsGlobal, meteoCoches);
   dessinerGraphe("graphe-co2", pointsGlobal, ["co2"]);
 }
 
-// Dernière valeur connue de chaque champ coché
+// Affiche la valeur la plus récente de chaque champ coché
 function afficherDerniere(points) {
-  if (!points || points.length === 0) return;
-  const tousCoches = [...getCoches("filtre-pm"), ...getCoches("filtre-meteo"), "co2"];
-
-  const html = Object.keys(CHAMPS)
-    .filter(c => tousCoches.includes(c))
-    .map(c => {
-      for (let i = points.length - 1; i >= 0; i--) {
-        if (points[i][c] != null) {
-          const [nom, unite] = CHAMPS[c];
-          const valeur = Number(points[i][c]).toFixed(c === "co2" ? 0 : 1);
-          const heure = parseDate(points[i].time).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
-          return `<div class="valeur" title="Mesure du ${heure}">${nom}<b>${valeur} ${unite}</b></div>`;
-        }
-      }
-      return null;
-    })
-    .filter(Boolean);
-
-  document.getElementById("valeurs").innerHTML = html.length > 0 ? html.join("") : "Aucun champ sélectionné";
+ if (!points || points.length === 0) return;
+ const derniere = points[points.length - 1];
+ const tousCoches = [...getCoches('filtre-pm'), ...getCoches('filtre-meteo'), 'co2'];
+ 
+ const html = Object.keys(CHAMPS)
+ .filter(c => derniere[c] !== undefined && tousCoches.includes(c))
+ .map(c => {
+   const [nom, unite] = CHAMPS[c];
+   const valeur = Number(derniere[c]).toFixed(c === "co2" ? 0 : 1);
+   return `<div class="valeur">${nom}<b>${valeur} ${unite}</b></div>`;
+ });
+ 
+ document.getElementById("valeurs").innerHTML = html.length > 0 ? html.join("") : "Aucun champ sélectionné";
 }
 
-// ---------- Rafraîchissement ----------
 async function rafraichir() {
-  const etat = document.getElementById("etat");
-  periodeCourante = document.getElementById("periode").value;
-  etat.className = "";
-  etat.textContent = "Chargement en cours...";
-
-  try {
-    pointsGlobal = await chargerMesures(periodeCourante);
-    finAxe = Date.now();
-
-    if (pointsGlobal.length === 0) {
-      etat.textContent = "Aucune mesure sur cette période pour votre carte.";
-      document.getElementById("valeurs").innerHTML = "Aucune donnée disponible";
-      return;
-    }
-
-    afficherDerniere(pointsGlobal);
-    actualiserAffichageInterface();
-
-    const derniere = parseDate(pointsGlobal[pointsGlobal.length - 1].time);
-    const age = Date.now() - derniere.getTime();
-    const date = derniere.toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
-    etat.className = age > 10 * MIN ? "attention" : "";
-    etat.textContent = `${pointsGlobal.length} points. Dernière mesure : ${date} (il y a ${depuis(age)}).`;
-  } catch (erreur) {
-    etat.className = "erreur";
-    etat.textContent = "Erreur de chargement : " + erreur.message;
-    console.error(erreur);
-  }
+ const etat = document.getElementById("etat");
+ const periode = document.getElementById("periode").value;
+ etat.className = "";
+ etat.textContent = "Chargement en cours...";
+ 
+ try {
+   pointsGlobal = await chargerMesures(periode);
+   if (!pointsGlobal || pointsGlobal.length === 0) {
+     etat.textContent = "Aucune mesure sur cette période pour votre carte.";
+     document.getElementById("valeurs").innerHTML = "Aucune donnée disponible";
+     return;
+   }
+   
+   afficherDerniere(pointsGlobal);
+   actualiserAffichageInterface();
+   
+   const date = parseDate(pointsGlobal[pointsGlobal.length - 1].time).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
+   etat.className = "";
+   etat.textContent = `Succès : ${pointsGlobal.length} points affichés. Dernière mesure : ${date}.`;
+ } catch (erreur) {
+   etat.className = "erreur";
+   etat.textContent = "Erreur de chargement : " + erreur.message;
+   console.error(erreur);
+ }
 }
 
+// Écouteurs d'événements
 document.getElementById("periode").addEventListener("change", rafraichir);
 
-document.querySelectorAll('input[type="checkbox"]').forEach(cb => {
-  cb.addEventListener("change", () => {
+// Met à jour les graphiques dès qu'on coche/décoche une case
+document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+  checkbox.addEventListener('change', () => {
     actualiserAffichageInterface();
     afficherDerniere(pointsGlobal);
   });
 });
 
+// Lancement direct et mise à jour automatique toutes les 5 minutes
 rafraichir();
 setInterval(rafraichir, 5 * 60 * 1000);
 </script>
