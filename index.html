@@ -4,8 +4,9 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Notre capteur</title>
-<!-- Chart.js : Chargement de la bibliothèque -->
+<!-- Chart.js et son adaptateur de dates -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
 <style>
 body {
   font-family: system-ui, sans-serif; color: #1b2420; background: #f6f7f6;
@@ -86,27 +87,23 @@ async function chargerMesures(periode) {
  return json.points || [];
 }
 
-// Dessine (ou redessine) un graphe avec une courbe par champ (avec fuseau horaire français)
+// Dessine un graphe avec une échelle de temps propre (gérée par Chart.js)
 function dessiner(idCanvas, points, champs) {
  if (typeof Chart === 'undefined') {
    console.error("Chart.js n'est pas chargé !");
    return 0;
  }
  
- // On force explicitement le fuseau horaire de Paris (Europe/Paris)
- const etiquettes = points.map(p => new Date(p.time).toLocaleString("fr-FR", {
-   timeZone: "Europe/Paris",
-   weekday: "short", 
-   hour: "2-digit", 
-   minute: "2-digit"
- }));
- 
+ // On transforme les points au format [{x: date, y: valeur}, ...] pour l'axe temporel
  const courbes = champs
  .filter(c => points.some(p => p[c] !== undefined))
  .map(c => ({
    label: CHAMPS[c][0],
-   data: points.map(p => p[c] ?? null),
-   pointRadius: points.length < 10 ? 4 : 0,
+   data: points.map(p => ({
+     x: new Date(p.time),
+     y: p[c] ?? null
+   })),
+   pointRadius: points.length < 15 ? 4 : 2, // Petits points visibles pour s'y retrouver
    borderWidth: 2,
  }));
 
@@ -119,10 +116,26 @@ function dessiner(idCanvas, points, champs) {
 
  graphes[idCanvas] = new Chart(ctx, {
    type: "line",
-   data: { labels: etiquettes, datasets: courbes },
+   data: { datasets: courbes },
    options: { 
      responsive: true,
-     interaction: { mode: "index", intersect: false } 
+     interaction: { mode: "index", intersect: false },
+     scales: {
+       x: {
+         type: 'time',
+         time: {
+           tooltipFormat: 'dd/MM/yyyy HH:mm',
+           displayFormats: {
+             minute: 'HH:mm',
+             hour: 'HH:mm',
+             day: 'dd/MM'
+           }
+         },
+         ticks: {
+           maxTicksLimit: 8 // Évite d'avoir trop de dates collées sur l'axe
+         }
+       }
+     }
    },
  });
  return courbes.length;
@@ -164,7 +177,6 @@ async function rafraichir() {
    const carteCo2 = document.getElementById("carte-co2");
    if (carteCo2) carteCo2.hidden = (avecCo2 === 0);
    
-   // Date de la dernière mesure convertie à l'heure de Paris
    const date = new Date(points[points.length - 1].time).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
    etat.className = "";
    etat.textContent = `Succès : ${points.length} points affichés. Dernière mesure : ${date}.`;
