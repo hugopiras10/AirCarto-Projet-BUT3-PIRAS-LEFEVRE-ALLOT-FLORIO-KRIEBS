@@ -58,9 +58,6 @@ h1 { margin-bottom: 4px; }
 const CLE = "1fdf17de86d313e5f49e03ab36f0360b";               // Remplacez par votre clé de groupe (32 caractères)
 const DEVICE_ID = "5C:01:3B:F1:53:C8";  // Identifiant unique de votre ESP32
 
-// Moyenne par intervalle selon la période
-const MOYENNE = { "-1h": "1m", "-6h": "5m", "-24h": "15m", "-7d": "1h" };
-
 // Nom affiché et unité de chaque champ de l'API
 const CHAMPS = {
  pm1: ["PM1", "µg/m³"], pm25: ["PM2.5", "µg/m³"], pm10: ["PM10", "µg/m³"],
@@ -68,9 +65,9 @@ const CHAMPS = {
 };
 const graphes = {};
 
-// Demande les mesures au serveur et trie chronologiquement du plus ancien au plus récent
+// Demande les mesures brutes au serveur (sans lissage de fréquence) et trie du plus ancien au plus récent
 async function chargerMesures(periode) {
- const params = new URLSearchParams({ key: CLE, start: periode, freq: MOYENNE[periode] });
+ const params = new URLSearchParams({ key: CLE, start: periode });
  if (DEVICE_ID) params.set("device_id", DEVICE_ID);
  
  const url = "https://api.aircarto.fr/iut-amu/data?" + params.toString();
@@ -86,17 +83,19 @@ async function chargerMesures(periode) {
  }
  
  let points = json.points || [];
- // Tri strict pour s'assurer que le temps s'écoule bien de gauche à droite
- points.sort((a, b) => new Date(a.time) - new Date(b.time));
+ 
+ // Tri strict pour s'assurer que le temps s'écoule de gauche à droite
+ points.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+ 
  return points;
 }
 
-// Dessine un graphe avec une échelle temporelle propre et cohérente
+// Dessine un graphe avec un axe temporel précis
 function dessiner(idCanvas, points, champs) {
  if (typeof Chart === 'undefined') {
    console.error("Chart.js n'est pas chargé !");
    return 0;
-}
+ }
  
  const courbes = champs
  .filter(c => points.some(p => p[c] !== undefined))
@@ -106,7 +105,7 @@ function dessiner(idCanvas, points, champs) {
      x: new Date(p.time),
      y: p[c] ?? null
    })),
-   pointRadius: points.length < 15 ? 4 : 2,
+   pointRadius: points.length < 20 ? 4 : 2,
    borderWidth: 2,
    spanGaps: true
  }));
@@ -129,6 +128,11 @@ function dessiner(idCanvas, points, champs) {
          type: 'time',
          time: {
            tooltipFormat: 'dd/MM/yyyy HH:mm',
+           displayFormats: {
+             minute: 'HH:mm',
+             hour: 'dd/MM HH:mm',
+             day: 'dd/MM'
+           }
          },
          ticks: {
            maxTicksLimit: 8,
@@ -179,7 +183,7 @@ async function rafraichir() {
    
    const date = new Date(points[points.length - 1].time).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
    etat.className = "";
-   etat.textContent = `Succès : ${points.length} points affichés. Dernière mesure : ${date}.`;
+   etat.textContent = `Succès : ${points.length} points bruts affichés. Dernière mesure : ${date}.`;
  } catch (erreur) {
    etat.className = "erreur";
    etat.textContent = "Erreur de chargement : " + erreur.message;
