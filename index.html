@@ -73,8 +73,6 @@ async function chargerMesures(periode) {
  if (DEVICE_ID) params.set("device_id", DEVICE_ID);
  
  const url = "https://api.aircarto.fr/iut-amu/data?" + params.toString();
- console.log("Requête envoyée vers :", url);
-
  const reponse = await fetch(url);
  
  if (!reponse.ok) {
@@ -82,30 +80,33 @@ async function chargerMesures(periode) {
  }
  
  const json = await reponse.json();
- console.log("Réponse reçue de l'API :", json);
-
  if (!json.ok) {
    throw new Error(json.message || "Erreur renvoyée par l'API");
  }
  return json.points || [];
 }
 
-// Dessine (ou redessine) un graphe avec une courbe par champ
+// Dessine (ou redessine) un graphe avec une courbe par champ (avec fuseau horaire français)
 function dessiner(idCanvas, points, champs) {
  if (typeof Chart === 'undefined') {
    console.error("Chart.js n'est pas chargé !");
    return 0;
  }
  
- const etiquettes = points.map(p => new Date(p.time).toLocaleString("fr-FR",
- { weekday: "short", hour: "2-digit", minute: "2-digit" }));
+ // On force explicitement le fuseau horaire de Paris (Europe/Paris)
+ const etiquettes = points.map(p => new Date(p.time).toLocaleString("fr-FR", {
+   timeZone: "Europe/Paris",
+   weekday: "short", 
+   hour: "2-digit", 
+   minute: "2-digit"
+ }));
  
  const courbes = champs
  .filter(c => points.some(p => p[c] !== undefined))
  .map(c => ({
    label: CHAMPS[c][0],
    data: points.map(p => p[c] ?? null),
-   pointRadius: points.length < 10 ? 4 : 0, // Affiche des petits points si y'en a très peu
+   pointRadius: points.length < 10 ? 4 : 0,
    borderWidth: 2,
  }));
 
@@ -150,7 +151,7 @@ async function rafraichir() {
  try {
    const points = await chargerMesures(periode);
    if (!points || points.length === 0) {
-     etat.textContent = "Aucune mesure sur cette période : essayez de sélectionner '1 dernière heure' ou vérifiez si l'ESP32 envoie bien.";
+     etat.textContent = "Aucune mesure sur cette période : essayez de sélectionner '1 dernière heure'.";
      document.getElementById("valeurs").innerHTML = "Aucune donnée disponible";
      return;
    }
@@ -163,7 +164,8 @@ async function rafraichir() {
    const carteCo2 = document.getElementById("carte-co2");
    if (carteCo2) carteCo2.hidden = (avecCo2 === 0);
    
-   const date = new Date(points[points.length - 1].time).toLocaleString("fr-FR");
+   // Date de la dernière mesure convertie à l'heure de Paris
+   const date = new Date(points[points.length - 1].time).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
    etat.className = "";
    etat.textContent = `Succès : ${points.length} points affichés. Dernière mesure : ${date}.`;
  } catch (erreur) {
