@@ -17,11 +17,11 @@ h1 { margin-bottom: 4px; }
   background: #fff; border: 1px solid #d6ddd8; border-radius: 8px;
   padding: 12px 16px; margin: 16px 0;
 }
-.filtres-container {
-  display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+.filtres-ligne {
+  display: flex; gap: 16px; align-items: center; margin-bottom: 10px; font-size: 0.9rem;
 }
-.filtres-container label {
-  cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: 500;
+.filtres-ligne label {
+  cursor: pointer; display: flex; align-items: center; gap: 5px; font-weight: 500;
 }
 #valeurs { display: flex; flex-wrap: wrap; gap: 24px; }
 .valeur b { display: block; font-size: 1.8rem; }
@@ -41,17 +41,6 @@ h1 { margin-bottom: 4px; }
  </select>
 </p>
 
-<!-- Panneau de sélection des courbes à afficher -->
-<div class="carte filtres-container">
- <strong>Afficher :</strong>
- <label><input type="checkbox" class="filtre-champ" value="pm1" checked> PM1</label>
- <label><input type="checkbox" class="filtre-champ" value="pm25" checked> PM2.5</label>
- <label><input type="checkbox" class="filtre-champ" value="pm10" checked> PM10</label>
- <label><input type="checkbox" class="filtre-champ" value="temp" checked> Température</label>
- <label><input type="checkbox" class="filtre-champ" value="hum" checked> Humidité</label>
- <label><input type="checkbox" class="filtre-champ" value="co2" checked> CO₂</label>
-</div>
-
 <p id="etat">Chargement en cours...</p>
 
 <div class="carte">
@@ -59,16 +48,30 @@ h1 { margin-bottom: 4px; }
  <div id="valeurs">En attente des données...</div>
 </div>
 
+<!-- Graphe PM avec ses propres filtres -->
 <div class="carte" id="carte-pm">
  <h2>Particules (µg/m³)</h2>
+ <div class="filtres-ligne">
+  <span>Afficher :</span>
+  <label><input type="checkbox" class="filtre-pm" value="pm1" checked> PM1</label>
+  <label><input type="checkbox" class="filtre-pm" value="pm25" checked> PM2.5</label>
+  <label><input type="checkbox" class="filtre-pm" value="pm10" checked> PM10</label>
+ </div>
  <canvas id="graphe-pm"></canvas>
 </div>
 
+<!-- Graphe Météo avec ses propres filtres -->
 <div class="carte" id="carte-meteo">
  <h2>Température (°C) et humidité (%)</h2>
+ <div class="filtres-ligne">
+  <span>Afficher :</span>
+  <label><input type="checkbox" class="filtre-meteo" value="temp" checked> Température</label>
+  <label><input type="checkbox" class="filtre-meteo" value="hum" checked> Humidité</label>
+ </div>
  <canvas id="graphe-meteo"></canvas>
 </div>
 
+<!-- Graphe CO2 -->
 <div class="carte" id="carte-co2">
  <h2>CO₂ (ppm)</h2>
  <canvas id="graphe-co2"></canvas>
@@ -89,7 +92,7 @@ const CHAMPS = {
 };
 
 const graphes = {};
-let pointsGlobal = []; // Stocke les points en mémoire pour un filtrage instantané
+let pointsGlobal = [];
 
 // Convertit proprement le timestamp (secondes -> millisecondes JS)
 function parseDate(timeValue) {
@@ -102,10 +105,9 @@ function parseDate(timeValue) {
   return new Date(timeValue);
 }
 
-// Récupère les champs cochés par l'utilisateur
-function getChampsCoches() {
-  const checkboxes = document.querySelectorAll('.filtre-champ:checked');
-  return Array.from(checkboxes).map(cb => cb.value);
+// Récupère les champs cochés pour une classe donnée
+function getCoches(classe) {
+  return Array.from(document.querySelectorAll('.' + classe + ':checked')).map(cb => cb.value);
 }
 
 // Demande les mesures au serveur et trie chronologiquement
@@ -126,18 +128,15 @@ async function chargerMesures(periode) {
  }
  
  let points = json.points || [];
- // Tri chronologique strict du plus ancien au plus récent
  points.sort((a, b) => parseDate(a.time).getTime() - parseDate(b.time).getTime());
- 
  return points;
 }
 
-// Dessine un graphe spécifique
+// Dessine un graphe spécifique en fonction de ses propres cases cochées
 function dessinerGraphe(idCanvas, idCarte, points, champsCibles, champsDispo) {
- const champsAffines = champsCibles.filter(c => champsDispo.includes(c));
  const carteDiv = document.getElementById(idCarte);
 
- if (champsAffines.length === 0) {
+ if (champsCibles.length === 0) {
    if (carteDiv) carteDiv.hidden = true;
    if (graphes[idCanvas]) { graphes[idCanvas].destroy(); graphes[idCanvas] = null; }
    return 0;
@@ -145,7 +144,7 @@ function dessinerGraphe(idCanvas, idCarte, points, champsCibles, champsDispo) {
 
  if (carteDiv) carteDiv.hidden = false;
  
- const courbes = champsAffines.map(c => ({
+ const courbes = champsCibles.map(c => ({
    label: CHAMPS[c][0],
    data: points.map(p => ({
      x: parseDate(p.time),
@@ -191,26 +190,26 @@ function dessinerGraphe(idCanvas, idCarte, points, champsCibles, champsDispo) {
  return courbes.length;
 }
 
-// Met à jour l'affichage de tous les graphiques et de la dernière valeur
+// Met à jour l'affichage global
 function actualiserAffichageInterface() {
   if (!pointsGlobal || pointsGlobal.length === 0) return;
 
-  const cochés = getChampsCoches();
+  const pmCoches = getCoches('filtre-pm');
+  const meteoCoches = getCoches('filtre-meteo');
 
-  // Dessine les 3 blocs de graphiques selon les cases cochées
-  dessinerGraphe("graphe-pm", "carte-pm", pointsGlobal, cochés, ["pm1", "pm25", "pm10"]);
-  dessinerGraphe("graphe-meteo", "carte-meteo", pointsGlobal, cochés, ["temp", "hum"]);
-  dessinerGraphe("graphe-co2", "carte-co2", pointsGlobal, cochés, ["co2"]);
+  dessinerGraphe("graphe-pm", "carte-pm", pointsGlobal, pmCoches, ["pm1", "pm25", "pm10"]);
+  dessinerGraphe("graphe-meteo", "carte-meteo", pointsGlobal, meteoCoches, ["temp", "hum"]);
+  dessinerGraphe("graphe-co2", "carte-co2", pointsGlobal, ["co2"], ["co2"]);
 }
 
-// Affiche la valeur la plus récente de chaque champ
+// Affiche la valeur la plus récente de chaque champ coché
 function afficherDerniere(points) {
  if (!points || points.length === 0) return;
  const derniere = points[points.length - 1];
- const cochés = getChampsCoches();
+ const tousCoches = [...getCoches('filtre-pm'), ...getCoches('filtre-meteo'), 'co2'];
  
  const html = Object.keys(CHAMPS)
- .filter(c => derniere[c] !== undefined && cochés.includes(c))
+ .filter(c => derniere[c] !== undefined && tousCoches.includes(c))
  .map(c => {
    const [nom, unite] = CHAMPS[c];
    const valeur = Number(derniere[c]).toFixed(c === "co2" ? 0 : 1);
@@ -250,8 +249,8 @@ async function rafraichir() {
 // Écouteurs d'événements
 document.getElementById("periode").addEventListener("change", rafraichir);
 
-// Dès qu'on coche/décoche une case, on met à jour l'affichage instantanément sans re-télécharger
-document.querySelectorAll('.filtre-champ').forEach(checkbox => {
+// Met à jour les graphiques dès qu'on coche/décoche une case
+document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
   checkbox.addEventListener('change', () => {
     actualiserAffichageInterface();
     afficherDerniere(pointsGlobal);
