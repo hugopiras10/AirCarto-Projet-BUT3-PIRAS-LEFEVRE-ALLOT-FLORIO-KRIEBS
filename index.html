@@ -87,14 +87,13 @@ async function chargerMesures(periode) {
  return json.points || [];
 }
 
-// Dessine un graphe avec une échelle de temps propre (gérée par Chart.js)
+// Dessine un graphe avec des échelles de temps claires incluant toujours la date
 function dessiner(idCanvas, points, champs) {
  if (typeof Chart === 'undefined') {
    console.error("Chart.js n'est pas chargé !");
    return 0;
  }
  
- // On transforme les points au format [{x: date, y: valeur}, ...] pour l'axe temporel
  const courbes = champs
  .filter(c => points.some(p => p[c] !== undefined))
  .map(c => ({
@@ -103,7 +102,7 @@ function dessiner(idCanvas, points, champs) {
      x: new Date(p.time),
      y: p[c] ?? null
    })),
-   pointRadius: points.length < 15 ? 4 : 2, // Petits points visibles pour s'y retrouver
+   pointRadius: points.length < 15 ? 4 : 2,
    borderWidth: 2,
  }));
 
@@ -125,14 +124,17 @@ function dessiner(idCanvas, points, champs) {
          type: 'time',
          time: {
            tooltipFormat: 'dd/MM/yyyy HH:mm',
+           // On force un affichage clair qui inclut toujours le jour et l'heure
            displayFormats: {
-             minute: 'HH:mm',
-             hour: 'HH:mm',
-             day: 'dd/MM'
+             minute: 'dd/MM HH:mm',
+             hour: 'dd/MM HH:mm',
+             day: 'dd/MM',
+             week: 'dd/MM'
            }
          },
          ticks: {
-           maxTicksLimit: 8 // Évite d'avoir trop de dates collées sur l'axe
+           maxTicksLimit: 6, // Évite que les étiquettes se superposent
+           autoSkip: true
          }
        }
      }
@@ -164,7 +166,7 @@ async function rafraichir() {
  try {
    const points = await chargerMesures(periode);
    if (!points || points.length === 0) {
-     etat.textContent = "Aucune mesure sur cette période : essayez de sélectionner '1 dernière heure'.";
+     etat.textContent = "Aucune mesure sur cette période : essayez de sélectionner '24 dernières heures'.";
      document.getElementById("valeurs").innerHTML = "Aucune donnée disponible";
      return;
    }
