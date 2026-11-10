@@ -28,6 +28,7 @@ h1 { margin-bottom: 4px; }
 <p>
  Période :
  <select id="periode">
+  <option value="-1h">1 dernière heure</option>
   <option value="-6h">6 dernières heures</option>
   <option value="-24h" selected>24 dernières heures</option>
   <option value="-7d">7 derniers jours</option>
@@ -53,11 +54,11 @@ h1 { margin-bottom: 4px; }
 
 <script>
 // ---------- RÉGLAGES : Mettez votre clé ici ----------
-const CLE = "1fdf17de86d313e5f49e03ab36f0360b"; // Remplacez par votre clé de groupe (32 caractères)
+const CLE = "VOTRE_CLE"; // Remplacez par votre clé de groupe (32 caractères)
 const DEVICE_ID = ""; // Laissez vide pour toutes les cartes
 
 // Moyenne par intervalle selon la période
-const MOYENNE = { "-6h": "5m", "-24h": "15m", "-7d": "1h" };
+const MOYENNE = { "-1h": "1m", "-6h": "5m", "-24h": "15m", "-7d": "1h" };
 
 // Nom affiché et unité de chaque champ de l'API
 const CHAMPS = {
@@ -72,6 +73,8 @@ async function chargerMesures(periode) {
  if (DEVICE_ID) params.set("device_id", DEVICE_ID);
  
  const url = "https://api.aircarto.fr/iut-amu/data?" + params.toString();
+ console.log("Requête envoyée vers :", url);
+
  const reponse = await fetch(url);
  
  if (!reponse.ok) {
@@ -79,10 +82,12 @@ async function chargerMesures(periode) {
  }
  
  const json = await reponse.json();
+ console.log("Réponse reçue de l'API :", json);
+
  if (!json.ok) {
    throw new Error(json.message || "Erreur renvoyée par l'API");
  }
- return json.points;
+ return json.points || [];
 }
 
 // Dessine (ou redessine) un graphe avec une courbe par champ
@@ -100,7 +105,7 @@ function dessiner(idCanvas, points, champs) {
  .map(c => ({
    label: CHAMPS[c][0],
    data: points.map(p => p[c] ?? null),
-   pointRadius: 0,
+   pointRadius: points.length < 10 ? 4 : 0, // Affiche des petits points si y'en a très peu
    borderWidth: 2,
  }));
 
@@ -145,7 +150,7 @@ async function rafraichir() {
  try {
    const points = await chargerMesures(periode);
    if (!points || points.length === 0) {
-     etat.textContent = "Aucune mesure sur cette période : la carte envoie-t-elle bien ses données ?";
+     etat.textContent = "Aucune mesure sur cette période : essayez de sélectionner '1 dernière heure' ou vérifiez si l'ESP32 envoie bien.";
      document.getElementById("valeurs").innerHTML = "Aucune donnée disponible";
      return;
    }
@@ -160,7 +165,7 @@ async function rafraichir() {
    
    const date = new Date(points[points.length - 1].time).toLocaleString("fr-FR");
    etat.className = "";
-   etat.textContent = `Succès : ${points.length} points affichés (moyenne : ${MOYENNE[periode]}). Dernière mesure : ${date}.`;
+   etat.textContent = `Succès : ${points.length} points affichés. Dernière mesure : ${date}.`;
  } catch (erreur) {
    etat.className = "erreur";
    etat.textContent = "Erreur de chargement : " + erreur.message;
@@ -170,7 +175,7 @@ async function rafraichir() {
 
 document.getElementById("periode").addEventListener("change", rafraichir);
 
-// Lancement direct et mise à jour automatique toutes les 5 minutes
+// Lancement direct et mise à jour automatique
 rafraichir();
 setInterval(rafraichir, 5 * 60 * 1000);
 </script>
