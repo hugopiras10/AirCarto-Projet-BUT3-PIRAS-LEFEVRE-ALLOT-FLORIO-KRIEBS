@@ -124,7 +124,6 @@ function dessiner(idCanvas, points, champs) {
          type: 'time',
          time: {
            tooltipFormat: 'dd/MM/yyyy HH:mm',
-           // On force un affichage clair qui inclut toujours le jour et l'heure
            displayFormats: {
              minute: 'dd/MM HH:mm',
              hour: 'dd/MM HH:mm',
@@ -133,7 +132,7 @@ function dessiner(idCanvas, points, champs) {
            }
          },
          ticks: {
-           maxTicksLimit: 6, // Évite que les étiquettes se superposent
+           maxTicksLimit: 6,
            autoSkip: true
          }
        }
