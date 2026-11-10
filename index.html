@@ -68,7 +68,7 @@ const CHAMPS = {
 };
 const graphes = {};
 
-// Demande les mesures au serveur et renvoie la liste des points
+// Demande les mesures au serveur et trie chronologiquement du plus ancien au plus récent
 async function chargerMesures(periode) {
  const params = new URLSearchParams({ key: CLE, start: periode, freq: MOYENNE[periode] });
  if (DEVICE_ID) params.set("device_id", DEVICE_ID);
@@ -84,10 +84,16 @@ async function chargerMesures(periode) {
  if (!json.ok) {
    throw new Error(json.message || "Erreur renvoyée par l'API");
  }
- return json.points || [];
+ 
+ let points = json.points || [];
+ 
+ // S'assure que les points sont bien triés du plus ancien au plus récent
+ points.sort((a, b) => new Date(a.time) - new Date(b.time));
+ 
+ return points;
 }
 
-// Dessine un graphe avec une échelle de temps réelle et des dates visibles sur l'axe X
+// Dessine un graphe avec un axe temporel strict de gauche à droite
 function dessiner(idCanvas, points, champs) {
  if (typeof Chart === 'undefined') {
    console.error("Chart.js n'est pas chargé !");
@@ -104,7 +110,7 @@ function dessiner(idCanvas, points, champs) {
    })),
    pointRadius: points.length < 15 ? 4 : 2,
    borderWidth: 2,
-   spanGaps: true // Permet de relier les points même s'il y a des trous de mesure
+   spanGaps: true
  }));
 
  if (graphes[idCanvas]) {
@@ -124,7 +130,6 @@ function dessiner(idCanvas, points, champs) {
        x: {
          type: 'time',
          time: {
-           unit: 'hour', // Force l'unité de base pour que l'échelle reste linéaire dans le temps
            tooltipFormat: 'dd/MM/yyyy HH:mm',
            displayFormats: {
              minute: 'dd/MM HH:mm',
