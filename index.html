@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Notre capteur</title>
+<title>Notre capteur - ModuleAir</title>
 <!-- Chart.js et son adaptateur de dates -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
@@ -25,10 +25,11 @@ h1 { margin-bottom: 4px; }
 </head>
 <body>
 <h1>Notre capteur</h1>
-<p>Mesures envoyées par la carte du groupe au serveur AirCarto.</p>
+<p>Mesures envoyées par la carte ModuleAir mini sur le serveur AirCarto.</p>
 <p>
  Période :
  <select id="periode">
+  <option value="-1h">1 dernière heure</option>
   <option value="-6h">6 dernières heures</option>
   <option value="-24h" selected>24 dernières heures</option>
   <option value="-7d">7 derniers jours</option>
@@ -53,12 +54,12 @@ h1 { margin-bottom: 4px; }
 </div>
 
 <script>
-// ---------- RÉGLAGES : Mettez votre clé ici ----------
-const CLE = "1fdf17de86d313e5f49e03ab36f0360b"; // Remplacez par votre clé de groupe (32 caractères)
-const DEVICE_ID = ""; // Laissez vide pour toutes les cartes
+// ---------- RÉGLAGES : Mettez votre clé de groupe ici ----------
+const CLE = "1fdf17de86d313e5f49e03ab36f0360b";               // Remplacez par votre clé de groupe (32 caractères)
+const DEVICE_ID = "5C:01:3B:F1:53:C8";  // Identifiant unique de votre ESP32
 
 // Moyenne par intervalle selon la période
-const MOYENNE = { "-6h": "5m", "-24h": "15m", "-7d": "1h" };
+const MOYENNE = { "-1h": "1m", "-6h": "5m", "-24h": "15m", "-7d": "1h" };
 
 // Nom affiché et unité de chaque champ de l'API
 const CHAMPS = {
@@ -85,16 +86,17 @@ async function chargerMesures(periode) {
  }
  
  let points = json.points || [];
+ // Tri strict pour s'assurer que le temps s'écoule bien de gauche à droite
  points.sort((a, b) => new Date(a.time) - new Date(b.time));
  return points;
 }
 
-// Dessine un graphe avec une échelle temporelle propre
+// Dessine un graphe avec une échelle temporelle propre et cohérente
 function dessiner(idCanvas, points, champs) {
  if (typeof Chart === 'undefined') {
    console.error("Chart.js n'est pas chargé !");
    return 0;
- }
+}
  
  const courbes = champs
  .filter(c => points.some(p => p[c] !== undefined))
@@ -162,7 +164,7 @@ async function rafraichir() {
  try {
    const points = await chargerMesures(periode);
    if (!points || points.length === 0) {
-     etat.textContent = "Aucune mesure sur cette période : essayez de sélectionner '7 derniers jours'.";
+     etat.textContent = "Aucune mesure sur cette période pour votre carte.";
      document.getElementById("valeurs").innerHTML = "Aucune donnée disponible";
      return;
    }
@@ -187,7 +189,7 @@ async function rafraichir() {
 
 document.getElementById("periode").addEventListener("change", rafraichir);
 
-// Lancement direct et mise à jour automatique
+// Lancement direct et mise à jour automatique toutes les 5 minutes
 rafraichir();
 setInterval(rafraichir, 5 * 60 * 1000);
 </script>
