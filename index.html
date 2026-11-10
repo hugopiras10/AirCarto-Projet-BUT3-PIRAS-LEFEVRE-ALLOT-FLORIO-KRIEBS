@@ -86,14 +86,11 @@ async function chargerMesures(periode) {
  }
  
  let points = json.points || [];
- 
- // S'assure que les points sont bien triés du plus ancien au plus récent
  points.sort((a, b) => new Date(a.time) - new Date(b.time));
- 
  return points;
 }
 
-// Dessine un graphe avec un axe temporel strict de gauche à droite
+// Dessine un graphe avec les jours et heures bien visibles sur l'axe X
 function dessiner(idCanvas, points, champs) {
  if (typeof Chart === 'undefined') {
    console.error("Chart.js n'est pas chargé !");
@@ -131,6 +128,7 @@ function dessiner(idCanvas, points, champs) {
          type: 'time',
          time: {
            tooltipFormat: 'dd/MM/yyyy HH:mm',
+           // Force l'affichage du jour et de l'heure sur l'axe des abscisses
            displayFormats: {
              minute: 'dd/MM HH:mm',
              hour: 'dd/MM HH:mm',
