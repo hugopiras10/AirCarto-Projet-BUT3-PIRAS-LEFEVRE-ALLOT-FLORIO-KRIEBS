@@ -139,18 +139,9 @@ function reperes(min, max, pas) {
   return res;
 }
 
-// Série d'un champ : on insère un trou (null) quand deux mesures sont trop éloignées,
-// pour ne pas relier par une droite trompeuse deux périodes séparées par une panne.
-function serie(points, champ, seuil) {
-  const data = [];
-  let prec = null;
-  for (const p of points) {
-    const x = parseDate(p.time).getTime();
-    if (prec !== null && x - prec > seuil) data.push({ x: prec + 1, y: null });
-    data.push({ x, y: p[champ] ?? null });
-    prec = x;
-  }
-  return data;
+// Série d'un champ : tous les points reçus, sans en retirer aucun
+function serie(points, champ) {
+  return points.map(p => ({ x: parseDate(p.time).getTime(), y: p[champ] ?? null }));
 }
 
 // ---------- Données ----------
@@ -177,17 +168,21 @@ function dessinerGraphe(idCanvas, points, champsCibles) {
   if (graphes[idCanvas]) graphes[idCanvas].destroy();
 
   const p = PERIODES[periodeCourante];
-  const seuil = 3 * p.fm;  // au-delà de 3 intervalles sans mesure : on coupe la courbe
+  const seuil = 3 * p.fm;  // au-delà de 3 intervalles sans mesure : segment en pointillés
 
   const courbes = champsCibles.map(c => ({
     label: CHAMPS[c][0],
-    data: serie(points, c, seuil),
+    data: serie(points, c),
     borderColor: CHAMPS[c][2],
     backgroundColor: CHAMPS[c][2],
-    pointRadius: points.length < 60 ? 3 : 1.5,
+    pointRadius: points.length < 30 ? 4 : 2,
     pointHoverRadius: 5,
     borderWidth: 2,
-    spanGaps: false,
+    spanGaps: true,
+    // La courbe reste continue ; un trou dans les mesures est tracé en pointillés
+    segment: {
+      borderDash: ctx => (ctx.p1.parsed.x - ctx.p0.parsed.x > seuil ? [6, 6] : undefined),
+    },
   }));
 
   graphes[idCanvas] = new Chart(ctx, {
