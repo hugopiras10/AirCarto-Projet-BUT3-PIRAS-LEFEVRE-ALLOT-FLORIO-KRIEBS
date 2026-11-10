@@ -87,7 +87,7 @@ async function chargerMesures(periode) {
  return json.points || [];
 }
 
-// Dessine un graphe avec des échelles de temps claires incluant toujours la date
+// Dessine un graphe avec une échelle de temps réelle et des dates visibles sur l'axe X
 function dessiner(idCanvas, points, champs) {
  if (typeof Chart === 'undefined') {
    console.error("Chart.js n'est pas chargé !");
@@ -104,6 +104,7 @@ function dessiner(idCanvas, points, champs) {
    })),
    pointRadius: points.length < 15 ? 4 : 2,
    borderWidth: 2,
+   spanGaps: true // Permet de relier les points même s'il y a des trous de mesure
  }));
 
  if (graphes[idCanvas]) {
@@ -123,6 +124,7 @@ function dessiner(idCanvas, points, champs) {
        x: {
          type: 'time',
          time: {
+           unit: 'hour', // Force l'unité de base pour que l'échelle reste linéaire dans le temps
            tooltipFormat: 'dd/MM/yyyy HH:mm',
            displayFormats: {
              minute: 'dd/MM HH:mm',
@@ -132,7 +134,7 @@ function dessiner(idCanvas, points, champs) {
            }
          },
          ticks: {
-           maxTicksLimit: 6,
+           maxTicksLimit: 8,
            autoSkip: true
          }
        }
