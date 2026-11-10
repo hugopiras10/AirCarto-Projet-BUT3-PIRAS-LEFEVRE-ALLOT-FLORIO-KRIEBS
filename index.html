@@ -17,6 +17,12 @@ h1 { margin-bottom: 4px; }
   background: #fff; border: 1px solid #d6ddd8; border-radius: 8px;
   padding: 12px 16px; margin: 16px 0;
 }
+.filtres-container {
+  display: flex; flex-wrap: wrap; gap: 16px; align-items: center;
+}
+.filtres-container label {
+  cursor: pointer; display: flex; align-items: center; gap: 6px; font-weight: 500;
+}
 #valeurs { display: flex; flex-wrap: wrap; gap: 24px; }
 .valeur b { display: block; font-size: 1.8rem; }
 #etat { color: #5a6a60; font-weight: 500; }
@@ -26,28 +32,43 @@ h1 { margin-bottom: 4px; }
 <body>
 <h1>Notre capteur</h1>
 <p>Mesures envoyées par la carte ModuleAir mini sur le serveur AirCarto.</p>
+
 <p>
  Période :
  <select id="periode">
-  <option value="-1h">1 dernière heure</option>
-  <option value="-6h">6 dernières heures</option>
   <option value="-24h" selected>24 dernières heures</option>
   <option value="-7d">7 derniers jours</option>
  </select>
 </p>
+
+<!-- Panneau de sélection des courbes à afficher -->
+<div class="carte filtres-container">
+ <strong>Afficher :</strong>
+ <label><input type="checkbox" class="filtre-champ" value="pm1" checked> PM1</label>
+ <label><input type="checkbox" class="filtre-champ" value="pm25" checked> PM2.5</label>
+ <label><input type="checkbox" class="filtre-champ" value="pm10" checked> PM10</label>
+ <label><input type="checkbox" class="filtre-champ" value="temp" checked> Température</label>
+ <label><input type="checkbox" class="filtre-champ" value="hum" checked> Humidité</label>
+ <label><input type="checkbox" class="filtre-champ" value="co2" checked> CO₂</label>
+</div>
+
 <p id="etat">Chargement en cours...</p>
+
 <div class="carte">
  <h2>Dernière mesure</h2>
  <div id="valeurs">En attente des données...</div>
 </div>
-<div class="carte">
+
+<div class="carte" id="carte-pm">
  <h2>Particules (µg/m³)</h2>
  <canvas id="graphe-pm"></canvas>
 </div>
-<div class="carte">
+
+<div class="carte" id="carte-meteo">
  <h2>Température (°C) et humidité (%)</h2>
  <canvas id="graphe-meteo"></canvas>
 </div>
+
 <div class="carte" id="carte-co2">
  <h2>CO₂ (ppm)</h2>
  <canvas id="graphe-co2"></canvas>
@@ -58,16 +79,38 @@ h1 { margin-bottom: 4px; }
 const CLE = "1fdf17de86d313e5f49e03ab36f0360b";               // Remplacez par votre clé de groupe (32 caractères)
 const DEVICE_ID = "5C:01:3B:F1:53:C8";  // Identifiant unique de votre ESP32
 
+// Fréquence adaptée selon la période
+const MOYENNE = { "-24h": "1m", "-7d": "5m" };
+
 // Nom affiché et unité de chaque champ de l'API
 const CHAMPS = {
  pm1: ["PM1", "µg/m³"], pm25: ["PM2.5", "µg/m³"], pm10: ["PM10", "µg/m³"],
  temp: ["Température", "°C"], hum: ["Humidité", "%"], co2: ["CO₂", "ppm"],
 };
-const graphes = {};
 
-// Demande les mesures brutes au serveur (sans lissage de fréquence) et trie du plus ancien au plus récent
+const graphes = {};
+let pointsGlobal = []; // Stocke les points en mémoire pour un filtrage instantané
+
+// Convertit proprement le timestamp (secondes -> millisecondes JS)
+function parseDate(timeValue) {
+  if (typeof timeValue === 'number') {
+    return new Date(timeValue * 1000);
+  }
+  if (!isNaN(timeValue) && typeof timeValue === 'string' && timeValue.trim() !== '') {
+    return new Date(Number(timeValue) * 1000);
+  }
+  return new Date(timeValue);
+}
+
+// Récupère les champs cochés par l'utilisateur
+function getChampsCoches() {
+  const checkboxes = document.querySelectorAll('.filtre-champ:checked');
+  return Array.from(checkboxes).map(cb => cb.value);
+}
+
+// Demande les mesures au serveur et trie chronologiquement
 async function chargerMesures(periode) {
- const params = new URLSearchParams({ key: CLE, start: periode });
+ const params = new URLSearchParams({ key: CLE, start: periode, freq: MOYENNE[periode] });
  if (DEVICE_ID) params.set("device_id", DEVICE_ID);
  
  const url = "https://api.aircarto.fr/iut-amu/data?" + params.toString();
@@ -83,29 +126,32 @@ async function chargerMesures(periode) {
  }
  
  let points = json.points || [];
- 
- // Tri strict pour s'assurer que le temps s'écoule de gauche à droite
- points.sort((a, b) => new Date(a.time).getTime() - new Date(b.time).getTime());
+ // Tri chronologique strict du plus ancien au plus récent
+ points.sort((a, b) => parseDate(a.time).getTime() - parseDate(b.time).getTime());
  
  return points;
 }
 
-// Dessine un graphe avec un axe temporel précis
-function dessiner(idCanvas, points, champs) {
- if (typeof Chart === 'undefined') {
-   console.error("Chart.js n'est pas chargé !");
+// Dessine un graphe spécifique
+function dessinerGraphe(idCanvas, idCarte, points, champsCibles, champsDispo) {
+ const champsAffines = champsCibles.filter(c => champsDispo.includes(c));
+ const carteDiv = document.getElementById(idCarte);
+
+ if (champsAffines.length === 0) {
+   if (carteDiv) carteDiv.hidden = true;
+   if (graphes[idCanvas]) { graphes[idCanvas].destroy(); graphes[idCanvas] = null; }
    return 0;
  }
+
+ if (carteDiv) carteDiv.hidden = false;
  
- const courbes = champs
- .filter(c => points.some(p => p[c] !== undefined))
- .map(c => ({
+ const courbes = champsAffines.map(c => ({
    label: CHAMPS[c][0],
    data: points.map(p => ({
-     x: new Date(p.time),
+     x: parseDate(p.time),
      y: p[c] ?? null
    })),
-   pointRadius: points.length < 20 ? 4 : 2,
+   pointRadius: points.length < 30 ? 4 : 2,
    borderWidth: 2,
    spanGaps: true
  }));
@@ -145,18 +191,33 @@ function dessiner(idCanvas, points, champs) {
  return courbes.length;
 }
 
+// Met à jour l'affichage de tous les graphiques et de la dernière valeur
+function actualiserAffichageInterface() {
+  if (!pointsGlobal || pointsGlobal.length === 0) return;
+
+  const cochés = getChampsCoches();
+
+  // Dessine les 3 blocs de graphiques selon les cases cochées
+  dessinerGraphe("graphe-pm", "carte-pm", pointsGlobal, cochés, ["pm1", "pm25", "pm10"]);
+  dessinerGraphe("graphe-meteo", "carte-meteo", pointsGlobal, cochés, ["temp", "hum"]);
+  dessinerGraphe("graphe-co2", "carte-co2", pointsGlobal, cochés, ["co2"]);
+}
+
 // Affiche la valeur la plus récente de chaque champ
 function afficherDerniere(points) {
  if (!points || points.length === 0) return;
  const derniere = points[points.length - 1];
+ const cochés = getChampsCoches();
+ 
  const html = Object.keys(CHAMPS)
- .filter(c => derniere[c] !== undefined)
+ .filter(c => derniere[c] !== undefined && cochés.includes(c))
  .map(c => {
    const [nom, unite] = CHAMPS[c];
    const valeur = Number(derniere[c]).toFixed(c === "co2" ? 0 : 1);
    return `<div class="valeur">${nom}<b>${valeur} ${unite}</b></div>`;
  });
- document.getElementById("valeurs").innerHTML = html.join("");
+ 
+ document.getElementById("valeurs").innerHTML = html.length > 0 ? html.join("") : "Aucun champ sélectionné";
 }
 
 async function rafraichir() {
@@ -166,24 +227,19 @@ async function rafraichir() {
  etat.textContent = "Chargement en cours...";
  
  try {
-   const points = await chargerMesures(periode);
-   if (!points || points.length === 0) {
+   pointsGlobal = await chargerMesures(periode);
+   if (!pointsGlobal || pointsGlobal.length === 0) {
      etat.textContent = "Aucune mesure sur cette période pour votre carte.";
      document.getElementById("valeurs").innerHTML = "Aucune donnée disponible";
      return;
    }
    
-   afficherDerniere(points);
-   dessiner("graphe-pm", points, ["pm1", "pm25", "pm10"]);
-   dessiner("graphe-meteo", points, ["temp", "hum"]);
-   const avecCo2 = dessiner("graphe-co2", points, ["co2"]);
+   afficherDerniere(pointsGlobal);
+   actualiserAffichageInterface();
    
-   const carteCo2 = document.getElementById("carte-co2");
-   if (carteCo2) carteCo2.hidden = (avecCo2 === 0);
-   
-   const date = new Date(points[points.length - 1].time).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
+   const date = parseDate(pointsGlobal[pointsGlobal.length - 1].time).toLocaleString("fr-FR", { timeZone: "Europe/Paris" });
    etat.className = "";
-   etat.textContent = `Succès : ${points.length} points bruts affichés. Dernière mesure : ${date}.`;
+   etat.textContent = `Succès : ${pointsGlobal.length} points affichés. Dernière mesure : ${date}.`;
  } catch (erreur) {
    etat.className = "erreur";
    etat.textContent = "Erreur de chargement : " + erreur.message;
@@ -191,7 +247,16 @@ async function rafraichir() {
  }
 }
 
+// Écouteurs d'événements
 document.getElementById("periode").addEventListener("change", rafraichir);
+
+// Dès qu'on coche/décoche une case, on met à jour l'affichage instantanément sans re-télécharger
+document.querySelectorAll('.filtre-champ').forEach(checkbox => {
+  checkbox.addEventListener('change', () => {
+    actualiserAffichageInterface();
+    afficherDerniere(pointsGlobal);
+  });
+});
 
 // Lancement direct et mise à jour automatique toutes les 5 minutes
 rafraichir();
