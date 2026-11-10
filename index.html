@@ -132,17 +132,10 @@ async function chargerMesures(periode) {
  return points;
 }
 
-// Dessine un graphe spécifique en fonction de ses propres cases cochées
-function dessinerGraphe(idCanvas, idCarte, points, champsCibles, champsDispo) {
+// Dessine un graphe (reste toujours visible même si aucune courbe n'est cochée)
+function dessinerGraphe(idCanvas, idCarte, points, champsCibles) {
  const carteDiv = document.getElementById(idCarte);
-
- if (champsCibles.length === 0) {
-   if (carteDiv) carteDiv.hidden = true;
-   if (graphes[idCanvas]) { graphes[idCanvas].destroy(); graphes[idCanvas] = null; }
-   return 0;
- }
-
- if (carteDiv) carteDiv.hidden = false;
+ if (carteDiv) carteDiv.hidden = false; // On s'assure que la carte reste toujours affichée
  
  const courbes = champsCibles.map(c => ({
    label: CHAMPS[c][0],
@@ -197,9 +190,9 @@ function actualiserAffichageInterface() {
   const pmCoches = getCoches('filtre-pm');
   const meteoCoches = getCoches('filtre-meteo');
 
-  dessinerGraphe("graphe-pm", "carte-pm", pointsGlobal, pmCoches, ["pm1", "pm25", "pm10"]);
-  dessinerGraphe("graphe-meteo", "carte-meteo", pointsGlobal, meteoCoches, ["temp", "hum"]);
-  dessinerGraphe("graphe-co2", "carte-co2", pointsGlobal, ["co2"], ["co2"]);
+  dessinerGraphe("graphe-pm", "carte-pm", pointsGlobal, pmCoches);
+  dessinerGraphe("graphe-meteo", "carte-meteo", pointsGlobal, meteoCoches);
+  dessinerGraphe("graphe-co2", "carte-co2", pointsGlobal, ["co2"]);
 }
 
 // Affiche la valeur la plus récente de chaque champ coché
