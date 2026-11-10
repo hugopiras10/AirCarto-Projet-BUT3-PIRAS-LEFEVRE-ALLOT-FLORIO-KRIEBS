@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Notre capteur</title>
-<!-- Chart.js : Chargement robuste de la bibliothèque -->
+<!-- Chart.js : Chargement de la bibliothèque -->
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <style>
 body {
@@ -75,4 +75,104 @@ async function chargerMesures(periode) {
  const reponse = await fetch(url);
  
  if (!reponse.ok) {
-   throw new Error("Erreur HTTP : " + reponse.status
+   throw new Error("Erreur HTTP : " + reponse.status);
+ }
+ 
+ const json = await reponse.json();
+ if (!json.ok) {
+   throw new Error(json.message || "Erreur renvoyée par l'API");
+ }
+ return json.points;
+}
+
+// Dessine (ou redessine) un graphe avec une courbe par champ
+function dessiner(idCanvas, points, champs) {
+ if (typeof Chart === 'undefined') {
+   console.error("Chart.js n'est pas chargé !");
+   return 0;
+ }
+ 
+ const etiquettes = points.map(p => new Date(p.time).toLocaleString("fr-FR",
+ { weekday: "short", hour: "2-digit", minute: "2-digit" }));
+ 
+ const courbes = champs
+ .filter(c => points.some(p => p[c] !== undefined))
+ .map(c => ({
+   label: CHAMPS[c][0],
+   data: points.map(p => p[c] ?? null),
+   pointRadius: 0,
+   borderWidth: 2,
+ }));
+
+ if (graphes[idCanvas]) {
+   graphes[idCanvas].destroy();
+ }
+ 
+ const ctx = document.getElementById(idCanvas);
+ if (!ctx) return 0;
+
+ graphes[idCanvas] = new Chart(ctx, {
+   type: "line",
+   data: { labels: etiquettes, datasets: courbes },
+   options: { 
+     responsive: true,
+     interaction: { mode: "index", intersect: false } 
+   },
+ });
+ return courbes.length;
+}
+
+// Affiche la valeur la plus récente de chaque champ
+function afficherDerniere(points) {
+ if (!points || points.length === 0) return;
+ const derniere = points[points.length - 1];
+ const html = Object.keys(CHAMPS)
+ .filter(c => derniere[c] !== undefined)
+ .map(c => {
+   const [nom, unite] = CHAMPS[c];
+   const valeur = Number(derniere[c]).toFixed(c === "co2" ? 0 : 1);
+   return `<div class="valeur">${nom}<b>${valeur} ${unite}</b></div>`;
+ });
+ document.getElementById("valeurs").innerHTML = html.join("");
+}
+
+async function rafraichir() {
+ const etat = document.getElementById("etat");
+ const periode = document.getElementById("periode").value;
+ etat.className = "";
+ etat.textContent = "Chargement en cours...";
+ 
+ try {
+   const points = await chargerMesures(periode);
+   if (!points || points.length === 0) {
+     etat.textContent = "Aucune mesure sur cette période : la carte envoie-t-elle bien ses données ?";
+     document.getElementById("valeurs").innerHTML = "Aucune donnée disponible";
+     return;
+   }
+   
+   afficherDerniere(points);
+   dessiner("graphe-pm", points, ["pm1", "pm25", "pm10"]);
+   dessiner("graphe-meteo", points, ["temp", "hum"]);
+   const avecCo2 = dessiner("graphe-co2", points, ["co2"]);
+   
+   const carteCo2 = document.getElementById("carte-co2");
+   if (carteCo2) carteCo2.hidden = (avecCo2 === 0);
+   
+   const date = new Date(points[points.length - 1].time).toLocaleString("fr-FR");
+   etat.className = "";
+   etat.textContent = `Succès : ${points.length} points affichés (moyenne : ${MOYENNE[periode]}). Dernière mesure : ${date}.`;
+ } catch (erreur) {
+   etat.className = "erreur";
+   etat.textContent = "Erreur de chargement : " + erreur.message;
+   console.error(erreur);
+ }
+}
+
+document.getElementById("periode").addEventListener("change", rafraichir);
+
+// Lancement direct et mise à jour automatique toutes les 5 minutes
+rafraichir();
+setInterval(rafraichir, 5 * 60 * 1000);
+</script>
+</body>
+</html>
