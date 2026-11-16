@@ -323,7 +323,7 @@ function setupColorPicker(paletteId, inputId, previewId) {
 setupColorPicker('bgPalette', 'bgColor', 'bgPreview');
 setupColorPicker('fgPalette', 'fgColor', 'fgPreview');
 
-// Gestion du bouton interactif avec passage par un proxy CORS public pour mobile
+// Gestion du bouton interactif avec passage sécurisé par proxy CORS et retour de diagnostic
 document.getElementById("btnAction").addEventListener("click", async () => {
   const message = document.getElementById("messageInput").value;
   const bgColor = document.getElementById("bgColor").value;
@@ -337,10 +337,11 @@ document.getElementById("btnAction").addEventListener("click", async () => {
   const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(targetUrl);
 
   try {
-    await fetch(proxyUrl, {
-      method: 'GET'
-    });
-    statutEl.textContent = "Affichage mis à jour sur l'écran LED !";
+    const response = await fetch(proxyUrl, { method: 'GET' });
+    const textResponse = await response.text();
+    
+    // Affiche la vraie réponse renvoyée par l'ESP32
+    statutEl.textContent = "Succès ! Réponse ESP32 : " + textResponse;
     statutEl.style.color = "#2e7d32";
   } catch (erreur) {
     statutEl.textContent = "Erreur : Impossible de joindre l'ESP32.";
