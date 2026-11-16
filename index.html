@@ -27,6 +27,31 @@ h1 { margin-bottom: 4px; }
 .valeur b { display: block; font-size: 1.8rem; }
 #etat { color: #5a6a60; font-weight: 500; }
 #etat.erreur { color: #b3261e; }
+
+/* Styles pour la palette de couleurs en grille */
+.palette-container {
+  display: flex; gap: 20px; flex-wrap: wrap; margin: 12px 0;
+}
+.color-picker-group {
+  display: flex; flex-direction: column; gap: 6px;
+}
+.palette-grid {
+  display: grid; grid-template-columns: repeat(4, 32px); gap: 6px;
+}
+.color-box {
+  width: 32px; height: 32px; border-radius: 4px; cursor: pointer;
+  border: 2px solid #ccc; transition: transform 0.1s, border-color 0.1s;
+}
+.color-box:hover {
+  transform: scale(1.1);
+}
+.color-box.selected {
+  border-color: #1b2420;
+  box-shadow: 0 0 0 2px #fff, 0 0 0 4px #1b2420;
+}
+.preview-box {
+  display: inline-block; width: 24px; height: 24px; border-radius: 4px; vertical-align: middle; border: 1px solid #ccc; margin-left: 5px;
+}
 </style>
 </head>
 <body>
@@ -49,39 +74,50 @@ h1 { margin-bottom: 4px; }
   <div id="valeurs">En attente des données...</div>
 </div>
 
-<!-- Carte interactive avec message et choix de couleurs prédéfinies -->
+<!-- Carte interactive avec message et grille de couleurs style application -->
 <div class="carte">
   <h2>Interaction ESP32 & Couleurs</h2>
-  <p>Personnalisez le message et choisissez des couleurs éclatantes pour la matrice LED :</p>
+  <p>Personnalisez le message et sélectionnez les couleurs sur la palette :</p>
   
-  <div style="margin-bottom: 10px;">
+  <div style="margin-bottom: 12px;">
     <input type="text" id="messageInput" value="Bonjour IUT!" placeholder="Message à afficher" style="width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #d6ddd8; border-radius: 4px;">
   </div>
 
-  <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-bottom: 10px;">
-    <label style="display: flex; align-items: center; gap: 5px; font-weight: 500;">
-      Fond :
-      <select id="bgColor" style="padding: 6px; border: 1px solid #d6ddd8; border-radius: 4px; background: white;">
-        <option value="0000FF" selected>Bleu vif</option>
-        <option value="000000">Noir (Éteint)</option>
-        <option value="FF0000">Rouge</option>
-        <option value="008000">Vert</option>
-        <option value="800080">Violet</option>
-        <option value="FF4500">Orange</option>
-      </select>
-    </label>
+  <div class="palette-container">
+    <!-- Choix couleur de fond -->
+    <div class="color-picker-group">
+      <label style="font-weight: 500; font-size: 0.9rem;">Couleur du fond : <span id="bgPreview" class="preview-box" style="background-color: #0000FF;"></span></label>
+      <div class="palette-grid" id="bgPalette">
+        <div class="color-box" style="background: #FF0000;" data-color="FF0000" title="Rouge"></div>
+        <div class="color-box" style="background: #00FFFF;" data-color="00FFFF" title="Cyan"></div>
+        <div class="color-box selected" style="background: #0000FF;" data-color="0000FF" title="Bleu"></div>
+        <div class="color-box" style="background: #00FF00;" data-color="00FF00" title="Vert"></div>
+        <div class="color-box" style="background: #FF00FF;" data-color="FF00FF" title="Magenta"></div>
+        <div class="color-box" style="background: #FFFF00;" data-color="FFFF00" title="Jaune"></div>
+        <div class="color-box" style="background: #000000;" data-color="000000" title="Noir"></div>
+        <div class="color-box" style="background: #FFFFFF;" data-color="FFFFFF" title="Blanc"></div>
+      </div>
+      <input type="hidden" id="bgColor" value="0000FF">
+    </div>
 
-    <label style="display: flex; align-items: center; gap: 5px; font-weight: 500;">
-      Texte :
-      <select id="fgColor" style="padding: 6px; border: 1px solid #d6ddd8; border-radius: 4px; background: white;">
-        <option value="FFFFFF" selected>Blanc</option>
-        <option value="FFFF00">Jaune</option>
-        <option value="00FFFF">Cyan</option>
-        <option value="FF00FF">Magenta</option>
-        <option value="00FF00">Vert fluo</option>
-      </select>
-    </label>
+    <!-- Choix couleur de texte -->
+    <div class="color-picker-group">
+      <label style="font-weight: 500; font-size: 0.9rem;">Couleur du texte : <span id="fgPreview" class="preview-box" style="background-color: #FFFFFF;"></span></label>
+      <div class="palette-grid" id="fgPalette">
+        <div class="color-box" style="background: #FF0000;" data-color="FF0000" title="Rouge"></div>
+        <div class="color-box" style="background: #00FFFF;" data-color="00FFFF" title="Cyan"></div>
+        <div class="color-box" style="background: #0000FF;" data-color="0000FF" title="Bleu"></div>
+        <div class="color-box" style="background: #00FF00;" data-color="00FF00" title="Vert"></div>
+        <div class="color-box" style="background: #FF00FF;" data-color="FF00FF" title="Magenta"></div>
+        <div class="color-box" style="background: #FFFF00;" data-color="FFFF00" title="Jaune"></div>
+        <div class="color-box" style="background: #000000;" data-color="000000" title="Noir"></div>
+        <div class="color-box selected" style="background: #FFFFFF;" data-color="FFFFFF" title="Blanc"></div>
+      </div>
+      <input type="hidden" id="fgColor" value="FFFFFF">
+    </div>
+  </div>
 
+  <div style="margin-top: 12px;">
     <button id="btnAction" style="background: #1b2420; color: white; border: none; padding: 10px 16px; border-radius: 4px; cursor: pointer; font-weight: 500;">Envoyer sur l'écran</button>
   </div>
   <p id="statutBouton" style="margin-top: 8px; font-size: 0.85rem; color: #5a6a60;"></p>
@@ -267,11 +303,60 @@ async function rafraichir() {
   }
 }
 
-// Gestion du bouton interactif avec transmission du message et des couleurs prédéfinies
+// Gestion de la sélection des carrés de couleur dans les grilles
+function setupColorPicker(paletteId, inputId, previewId) {
+  const palette = document.getElementById(paletteId);
+  const input = document.getElementById(inputId);
+  const preview = document.getElementById(previewId);
+
+  palette.querySelectorAll('.color-box').forEach(box => {
+    box.addEventListener('click', () => {
+      palette.querySelectorAll('.color-box').forEach(b => b.classList.remove('selected'));
+      box.classList.add('selected');
+      const colorHex = box.getAttribute('data-color');
+      input.value = colorHex;
+      preview.style.backgroundColor = '#' + colorHex;
+    });
+  });
+}
+
+setupColorPicker('bgPalette', 'bgColor', 'bgPreview');
+setupColorPicker('fgPalette', 'fgColor', 'fgPreview');
+
+// Gestion du bouton interactif avec transmission du message et des couleurs de la palette
 document.getElementById("btnAction").addEventListener("click", async () => {
   const message = document.getElementById("messageInput").value;
   const bgColor = document.getElementById("bgColor").value;
   const fgColor = document.getElementById("fgColor").value;
   const statutEl = document.getElementById("statutBouton");
 
-  statut
+  statutEl.textContent = "Envoi à l'ESP32...";
+  statutEl.style.color = "#1b2420";
+
+  try {
+    await fetch(`${ESP32_IP}/message?texte=${encodeURIComponent(message)}&bg=${bgColor}&fg=${fgColor}`, {
+      method: 'GET',
+      mode: 'no-cors'
+    });
+    statutEl.textContent = "Affichage mis à jour sur l'écran LED !";
+    statutEl.style.color = "#2e7d32";
+  } catch (erreur) {
+    statutEl.textContent = "Erreur : Impossible de joindre l'ESP32 en local.";
+    statutEl.style.color = "#b3261e";
+  }
+});
+
+document.getElementById("periode").addEventListener("change", rafraichir);
+
+document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
+  checkbox.addEventListener('change', () => {
+    actualiserAffichageInterface();
+    afficherDerniere(pointsGlobal);
+  });
+});
+
+rafraichir();
+setInterval(rafraichir, 15000);
+</script>
+</body>
+</html>
