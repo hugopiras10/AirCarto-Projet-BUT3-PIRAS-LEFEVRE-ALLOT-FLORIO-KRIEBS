@@ -49,6 +49,17 @@ h1 { margin-bottom: 4px; }
   <div id="valeurs">En attente des données...</div>
 </div>
 
+<!-- Carte interactive pour envoyer un message sur l'écran de l'ESP32 -->
+<div class="carte">
+  <h2>Interaction ESP32</h2>
+  <p>Envoyer un message personnalisé sur la matrice LED de l'ESP32 :</p>
+  <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+    <input type="text" id="messageInput" value="Bonjour IUT!" placeholder="Message à afficher" style="padding: 8px; border: 1px solid #d6ddd8; border-radius: 4px; flex-grow: 1;">
+    <button id="btnAction" style="background: #1b2420; color: white; border: none; padding: 10px 16px; border-radius: 4px; cursor: pointer; font-weight: 500;">Envoyer sur l'écran</button>
+  </div>
+  <p id="statutBouton" style="margin-top: 8px; font-size: 0.85rem; color: #5a6a60;"></p>
+</div>
+
 <!-- Graphe PM avec ses propres filtres -->
 <div class="carte">
   <h2>Particules (µg/m³)</h2>
@@ -80,7 +91,7 @@ h1 { margin-bottom: 4px; }
 
 <script>
 // ---------- RÉGLAGES : Mettez votre clé de groupe ici ----------
-const CLE = "1fdf17de86d313e5f49e03ab36f0360b";                 // Remplacez par votre clé de groupe (32 caractères)
+const CLE = "1fdf17de86d313e5f49e03ab36f0360b";                 // Votre clé de groupe (32 caractères)
 const DEVICE_ID = "5C:01:3B:F1:53:C8";  // Identifiant unique de votre ESP32
 
 // Moyenne demandée au serveur selon la période.
@@ -159,7 +170,7 @@ function dessinerGraphe(idCanvas, points, champsCibles) {
     data: { datasets: courbes },
     options: { 
       responsive: true,
-      animation: false, // Désactive l'animation pour un rafraîchissement plus fluide en temps réel
+      animation: false,
       interaction: { mode: "index", intersect: false },
       scales: {
         x: {
@@ -236,10 +247,33 @@ async function rafraichir() {
   }
 }
 
+// Gestion du bouton interactif vers l'ESP32 local
+document.getElementById("btnAction").addEventListener("click", async () => {
+  const message = document.getElementById("messageInput").value;
+  const statutEl = document.getElementById("statutBouton");
+  
+  // Remplacer par l'adresse IP locale de votre ESP32 affichée dans le Moniteur Série (ex: "http://192.168.1.50")
+  const ESP32_IP = "http://192.168.1.XXX"; 
+
+  statutEl.textContent = "Envoi à l'ESP32...";
+  statutEl.style.color = "#1b2420";
+
+  try {
+    await fetch(`${ESP32_IP}/message?texte=${encodeURIComponent(message)}`, {
+      method: 'GET',
+      mode: 'no-cors'
+    });
+    statutEl.textContent = "Message envoyé avec succès sur l'écran !";
+    statutEl.style.color = "#2e7d32";
+  } catch (erreur) {
+    statutEl.textContent = "Erreur : Impossible de joindre l'ESP32 en local.";
+    statutEl.style.color = "#b3261e";
+  }
+});
+
 // Écouteurs d'événements
 document.getElementById("periode").addEventListener("change", rafraichir);
 
-// Met à jour les graphiques dès qu'on coche/décoche une case
 document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
   checkbox.addEventListener('change', () => {
     actualiserAffichageInterface();
@@ -247,10 +281,8 @@ document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
   });
 });
 
-// Lancement direct au chargement de la page
+// Lancement direct et actualisation automatique toutes les 15 secondes
 rafraichir();
-
-// Actualisation automatique en arrière-plan toutes les 15 secondes (Temps réel)
 setInterval(rafraichir, 15000);
 </script>
 </body>
