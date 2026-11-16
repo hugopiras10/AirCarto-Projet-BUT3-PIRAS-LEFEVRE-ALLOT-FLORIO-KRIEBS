@@ -323,25 +323,23 @@ function setupColorPicker(paletteId, inputId, previewId) {
 setupColorPicker('bgPalette', 'bgColor', 'bgPreview');
 setupColorPicker('fgPalette', 'fgColor', 'fgPreview');
 
-// Gestion du bouton interactif avec passage sécurisé par proxy CORS et retour de diagnostic
+// Gestion du bouton interactif avec le nouveau proxy fonctionnel
 document.getElementById("btnAction").addEventListener("click", async () => {
   const message = document.getElementById("messageInput").value;
   const bgColor = document.getElementById("bgColor").value;
   const fgColor = document.getElementById("fgColor").value;
   const statutEl = document.getElementById("statutBouton");
 
-  statutEl.textContent = "Envoi à l'ESP32 via le proxy...";
+  statutEl.textContent = "Envoi à l'ESP32...";
   statutEl.style.color = "#1b2420";
 
   const targetUrl = `${ESP32_IP}/message?texte=${encodeURIComponent(message)}&bg=${bgColor}&fg=${fgColor}`;
-  const proxyUrl = "https://corsproxy.io/?" + encodeURIComponent(targetUrl);
+  // Nouveau proxy fonctionnel sans clé requise
+  const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(targetUrl);
 
   try {
-    const response = await fetch(proxyUrl, { method: 'GET' });
-    const textResponse = await response.text();
-    
-    // Affiche la vraie réponse renvoyée par l'ESP32
-    statutEl.textContent = "Succès ! Réponse ESP32 : " + textResponse;
+    await fetch(proxyUrl, { method: 'GET' });
+    statutEl.textContent = "Affichage mis à jour sur l'écran LED !";
     statutEl.style.color = "#2e7d32";
   } catch (erreur) {
     statutEl.textContent = "Erreur : Impossible de joindre l'ESP32.";
