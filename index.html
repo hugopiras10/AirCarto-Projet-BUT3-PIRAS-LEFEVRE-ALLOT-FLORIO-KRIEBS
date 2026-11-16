@@ -49,12 +49,22 @@ h1 { margin-bottom: 4px; }
   <div id="valeurs">En attente des données...</div>
 </div>
 
-<!-- Carte interactive pour envoyer un message sur l'écran de l'ESP32 -->
+<!-- Carte interactive avec message et choix des couleurs -->
 <div class="carte">
-  <h2>Interaction ESP32</h2>
-  <p>Envoyer un message personnalisé sur la matrice LED de l'ESP32 :</p>
-  <div style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
-    <input type="text" id="messageInput" value="Bonjour IUT!" placeholder="Message à afficher" style="padding: 8px; border: 1px solid #d6ddd8; border-radius: 4px; flex-grow: 1;">
+  <h2>Interaction ESP32 & Couleurs</h2>
+  <p>Personnalisez le message et les couleurs affichés sur la matrice LED :</p>
+  
+  <div style="margin-bottom: 10px;">
+    <input type="text" id="messageInput" value="Bonjour IUT!" placeholder="Message à afficher" style="width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #d6ddd8; border-radius: 4px;">
+  </div>
+
+  <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 10px;">
+    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+      Couleur du fond : <input type="color" id="bgColor" value="#0050c8" style="cursor: pointer; border: none; width: 35px; height: 30px; background: none;">
+    </label>
+    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
+      Couleur du texte : <input type="color" id="fgColor" value="#ffffff" style="cursor: pointer; border: none; width: 35px; height: 30px; background: none;">
+    </label>
     <button id="btnAction" style="background: #1b2420; color: white; border: none; padding: 10px 16px; border-radius: 4px; cursor: pointer; font-weight: 500;">Envoyer sur l'écran</button>
   </div>
   <p id="statutBouton" style="margin-top: 8px; font-size: 0.85rem; color: #5a6a60;"></p>
@@ -90,14 +100,13 @@ h1 { margin-bottom: 4px; }
 </div>
 
 <script>
-// ---------- RÉGLAGES : Mettez votre clé de groupe ici ----------
+// ---------- RÉGLAGES ----------
 const CLE = "1fdf17de86d313e5f49e03ab36f0360b";                 // Votre clé de groupe (32 caractères)
 const DEVICE_ID = "5C:01:3B:F1:53:C8";  // Identifiant unique de votre ESP32
+const ESP32_IP = "http://192.168.1.180"; // Adresse IP locale de votre ESP32
 
-// Moyenne demandée au serveur selon la période.
 const MOYENNE = { "-24h": "1m", "-7d": "5m" };
 
-// Nom affiché et unité de chaque champ de l'API
 const CHAMPS = {
   pm1: ["PM1", "µg/m³"], pm25: ["PM2.5", "µg/m³"], pm10: ["PM10", "µg/m³"],
   temp: ["Température", "°C"], hum: ["Humidité", "%"], co2: ["CO₂", "ppm"],
@@ -106,7 +115,6 @@ const CHAMPS = {
 const graphes = {};
 let pointsGlobal = [];
 
-// Convertit proprement le timestamp (secondes -> millisecondes JS)
 function parseDate(timeValue) {
   if (typeof timeValue === 'number') {
     return new Date(timeValue * 1000);
@@ -117,12 +125,10 @@ function parseDate(timeValue) {
   return new Date(timeValue);
 }
 
-// Récupère les champs cochés pour une classe donnée
 function getCoches(classe) {
   return Array.from(document.querySelectorAll('.' + classe + ':checked')).map(cb => cb.value);
 }
 
-// Demande les mesures au serveur et trie chronologiquement
 async function chargerMesures(periode) {
   const params = new URLSearchParams({ key: CLE, start: periode });
   if (MOYENNE[periode]) params.set("freq", MOYENNE[periode]);
@@ -145,7 +151,6 @@ async function chargerMesures(periode) {
   return points;
 }
 
-// Dessine un graphe
 function dessinerGraphe(idCanvas, points, champsCibles) {
   const courbes = champsCibles.map(c => ({
     label: CHAMPS[c][0],
@@ -193,7 +198,6 @@ function dessinerGraphe(idCanvas, points, champsCibles) {
   });
 }
 
-// Met à jour l'affichage global
 function actualiserAffichageInterface() {
   if (!pointsGlobal || pointsGlobal.length === 0) return;
 
@@ -205,7 +209,6 @@ function actualiserAffichageInterface() {
   dessinerGraphe("graphe-co2", pointsGlobal, ["co2"]);
 }
 
-// Affiche la valeur la plus récente de chaque champ coché
 function afficherDerniere(points) {
   if (!points || points.length === 0) return;
   const derniere = points[points.length - 1];
@@ -247,23 +250,22 @@ async function rafraichir() {
   }
 }
 
-// Gestion du bouton interactif vers l'ESP32 local
+// Gestion du bouton interactif avec transmission du message et des couleurs
 document.getElementById("btnAction").addEventListener("click", async () => {
   const message = document.getElementById("messageInput").value;
+  const bgColor = document.getElementById("bgColor").value.replace("#", "");
+  const fgColor = document.getElementById("fgColor").value.replace("#", "");
   const statutEl = document.getElementById("statutBouton");
-  
-  // Remplacer par l'adresse IP locale de votre ESP32 affichée dans le Moniteur Série (ex: "http://192.168.1.50")
-  const ESP32_IP = "http://192.168.1.180"; 
 
   statutEl.textContent = "Envoi à l'ESP32...";
   statutEl.style.color = "#1b2420";
 
   try {
-    await fetch(`${ESP32_IP}/message?texte=${encodeURIComponent(message)}`, {
+    await fetch(`${ESP32_IP}/message?texte=${encodeURIComponent(message)}&bg=${bgColor}&fg=${fgColor}`, {
       method: 'GET',
       mode: 'no-cors'
     });
-    statutEl.textContent = "Message envoyé avec succès sur l'écran !";
+    statutEl.textContent = "Affichage mis à jour sur l'écran LED !";
     statutEl.style.color = "#2e7d32";
   } catch (erreur) {
     statutEl.textContent = "Erreur : Impossible de joindre l'ESP32 en local.";
@@ -271,7 +273,6 @@ document.getElementById("btnAction").addEventListener("click", async () => {
   }
 });
 
-// Écouteurs d'événements
 document.getElementById("periode").addEventListener("change", rafraichir);
 
 document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
@@ -281,7 +282,6 @@ document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
   });
 });
 
-// Lancement direct et actualisation automatique toutes les 15 secondes
 rafraichir();
 setInterval(rafraichir, 15000);
 </script>
