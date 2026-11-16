@@ -49,22 +49,39 @@ h1 { margin-bottom: 4px; }
   <div id="valeurs">En attente des données...</div>
 </div>
 
-<!-- Carte interactive avec message et choix des couleurs -->
+<!-- Carte interactive avec message et choix de couleurs prédéfinies -->
 <div class="carte">
   <h2>Interaction ESP32 & Couleurs</h2>
-  <p>Personnalisez le message et les couleurs affichés sur la matrice LED :</p>
+  <p>Personnalisez le message et choisissez des couleurs éclatantes pour la matrice LED :</p>
   
   <div style="margin-bottom: 10px;">
     <input type="text" id="messageInput" value="Bonjour IUT!" placeholder="Message à afficher" style="width: 100%; padding: 8px; box-sizing: border-box; border: 1px solid #d6ddd8; border-radius: 4px;">
   </div>
 
-  <div style="display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 10px;">
-    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-      Couleur du fond : <input type="color" id="bgColor" value="#0050c8" style="cursor: pointer; border: none; width: 35px; height: 30px; background: none;">
+  <div style="display: flex; gap: 15px; align-items: center; flex-wrap: wrap; margin-bottom: 10px;">
+    <label style="display: flex; align-items: center; gap: 5px; font-weight: 500;">
+      Fond :
+      <select id="bgColor" style="padding: 6px; border: 1px solid #d6ddd8; border-radius: 4px; background: white;">
+        <option value="0000FF" selected>Bleu vif</option>
+        <option value="000000">Noir (Éteint)</option>
+        <option value="FF0000">Rouge</option>
+        <option value="008000">Vert</option>
+        <option value="800080">Violet</option>
+        <option value="FF4500">Orange</option>
+      </select>
     </label>
-    <label style="display: flex; align-items: center; gap: 5px; cursor: pointer;">
-      Couleur du texte : <input type="color" id="fgColor" value="#ffffff" style="cursor: pointer; border: none; width: 35px; height: 30px; background: none;">
+
+    <label style="display: flex; align-items: center; gap: 5px; font-weight: 500;">
+      Texte :
+      <select id="fgColor" style="padding: 6px; border: 1px solid #d6ddd8; border-radius: 4px; background: white;">
+        <option value="FFFFFF" selected>Blanc</option>
+        <option value="FFFF00">Jaune</option>
+        <option value="00FFFF">Cyan</option>
+        <option value="FF00FF">Magenta</option>
+        <option value="00FF00">Vert fluo</option>
+      </select>
     </label>
+
     <button id="btnAction" style="background: #1b2420; color: white; border: none; padding: 10px 16px; border-radius: 4px; cursor: pointer; font-weight: 500;">Envoyer sur l'écran</button>
   </div>
   <p id="statutBouton" style="margin-top: 8px; font-size: 0.85rem; color: #5a6a60;"></p>
@@ -250,40 +267,11 @@ async function rafraichir() {
   }
 }
 
-// Gestion du bouton interactif avec transmission du message et des couleurs
+// Gestion du bouton interactif avec transmission du message et des couleurs prédéfinies
 document.getElementById("btnAction").addEventListener("click", async () => {
   const message = document.getElementById("messageInput").value;
-  const bgColor = document.getElementById("bgColor").value.replace("#", "");
-  const fgColor = document.getElementById("fgColor").value.replace("#", "");
+  const bgColor = document.getElementById("bgColor").value;
+  const fgColor = document.getElementById("fgColor").value;
   const statutEl = document.getElementById("statutBouton");
 
-  statutEl.textContent = "Envoi à l'ESP32...";
-  statutEl.style.color = "#1b2420";
-
-  try {
-    await fetch(`${ESP32_IP}/message?texte=${encodeURIComponent(message)}&bg=${bgColor}&fg=${fgColor}`, {
-      method: 'GET',
-      mode: 'no-cors'
-    });
-    statutEl.textContent = "Affichage mis à jour sur l'écran LED !";
-    statutEl.style.color = "#2e7d32";
-  } catch (erreur) {
-    statutEl.textContent = "Erreur : Impossible de joindre l'ESP32 en local.";
-    statutEl.style.color = "#b3261e";
-  }
-});
-
-document.getElementById("periode").addEventListener("change", rafraichir);
-
-document.querySelectorAll('input[type="checkbox"]').forEach(checkbox => {
-  checkbox.addEventListener('change', () => {
-    actualiserAffichageInterface();
-    afficherDerniere(pointsGlobal);
-  });
-});
-
-rafraichir();
-setInterval(rafraichir, 15000);
-</script>
-</body>
-</html>
+  statut
