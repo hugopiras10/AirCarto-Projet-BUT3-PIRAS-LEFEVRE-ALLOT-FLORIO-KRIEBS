@@ -156,8 +156,9 @@ h1 { margin-bottom: 4px; }
 // ---------- RÉGLAGES ----------
 const CLE = "1fdf17de86d313e5f49e03ab36f0360b";                 // Votre clé de groupe (32 caractères)
 const DEVICE_ID = "5C:01:3B:F1:53:C8";  // Identifiant unique de votre ESP32
-const ESP32_IP = "http://192.168.1.180"; // Adresse IP locale de votre ESP32
+const ESP32_IP = "http://192.168.1.180"; // Adresse IP locale de votre ESP32 (celle affichée sur le moniteur série)
 
+// Pas de moyenne pour "-1h" : le serveur renvoie les mesures brutes
 const MOYENNE = { "-24h": "1m", "-7d": "5m" };
 
 const CHAMPS = {
@@ -323,28 +324,45 @@ function setupColorPicker(paletteId, inputId, previewId) {
 setupColorPicker('bgPalette', 'bgColor', 'bgPreview');
 setupColorPicker('fgPalette', 'fgColor', 'fgPreview');
 
-// Gestion du bouton interactif avec le nouveau proxy fonctionnel
+// Les accents ne s'affichent pas sur la matrice (police anglaise) : on les retire
+function sansAccents(texte) {
+  return texte.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^\x20-\x7E]/g, "?");
+}
+
+// Envoi DIRECT à l'ESP32. L'ancien proxy (allorigins) est sur internet : il ne peut pas
+// joindre une adresse locale en 192.168.x.x, la requête n'arrivait donc jamais à la carte.
+// Conditions : PC et ESP32 sur le même Wi-Fi, page ouverte en fichier local ou en http://.
 document.getElementById("btnAction").addEventListener("click", async () => {
-  const message = document.getElementById("messageInput").value;
+  const message = sansAccents(document.getElementById("messageInput").value);
   const bgColor = document.getElementById("bgColor").value;
   const fgColor = document.getElementById("fgColor").value;
   const statutEl = document.getElementById("statutBouton");
 
+  if (message.trim() === "") {
+    statutEl.textContent = "Écrivez un message.";
+    statutEl.style.color = "#b3261e";
+    return;
+  }
+
   statutEl.textContent = "Envoi à l'ESP32...";
   statutEl.style.color = "#1b2420";
 
-  const targetUrl = `${ESP32_IP}/message?texte=${encodeURIComponent(message)}&bg=${bgColor}&fg=${fgColor}`;
-  // Nouveau proxy fonctionnel sans clé requise
-  const proxyUrl = "https://api.allorigins.win/raw?url=" + encodeURIComponent(targetUrl);
+  const url = `${ESP32_IP}/message?texte=${encodeURIComponent(message)}&bg=${bgColor}&fg=${fgColor}`;
+  const controle = new AbortController();
+  const delai = setTimeout(() => controle.abort(), 5000);   // abandon après 5 s
 
   try {
-    await fetch(proxyUrl, { method: 'GET' });
-    statutEl.textContent = "Affichage mis à jour sur l'écran LED !";
+    const reponse = await fetch(url, { signal: controle.signal });
+    if (!reponse.ok) throw new Error("réponse HTTP " + reponse.status);
+    statutEl.textContent = "Message reçu par l'ESP32 : il s'affiche sur l'écran LED.";
     statutEl.style.color = "#2e7d32";
   } catch (erreur) {
-    statutEl.textContent = "Erreur : Impossible de joindre l'ESP32.";
+    const raison = erreur.name === "AbortError" ? "pas de réponse (adresse IP ou réseau ?)" : erreur.message;
+    statutEl.textContent = "Erreur : l'ESP32 n'a pas confirmé la réception, " + raison + ".";
     statutEl.style.color = "#b3261e";
     console.error(erreur);
+  } finally {
+    clearTimeout(delai);
   }
 });
 
